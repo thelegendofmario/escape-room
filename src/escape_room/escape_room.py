@@ -9,8 +9,6 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 load_dotenv(dotenv_path='./.env')
 
-print(os.environ)
-
 app = App(token=os.getenv('SLACK_BOT_TOKEN'))
 
 first_answer_encoded = ''
