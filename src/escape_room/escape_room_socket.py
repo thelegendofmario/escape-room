@@ -1,7 +1,6 @@
 import os
 import re
 import random
-import time
 from dotenv import load_dotenv
 from . import utility
 from slack_bolt import App
@@ -9,13 +8,13 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 load_dotenv(dotenv_path='./.env')
 
-app = App(token=os.getenv('SLACK_BOT_TOKEN'))
+app = App(token=os.getenv('SLACK_BOT_TOKEN'), signing_secret=os.getenv('SLACK_SIGNING_SECRET'))
 
 first_answer_encoded = ''
 first_answer = ''
 first_puzzle_complete = False
 has_key = False
-final_puzzle_answer = '07%2A846%235'
+
 second_puzzle_finished = False
 
 @app.message(re.compile("START"))
@@ -50,9 +49,8 @@ def start_message(message, say):
 
 @app.action("begin")
 def handle_begin(ack, say, body, respond):
-	global first_answer_encoded
-	first_answer_encoded = ''
 	ack()
+	utility.initialize_new_session(body['container']['channel_id'])
 	respond(f"_<@{body['user']['id']}>_ started!")
 	say("_you are in a room, with a large door with a large keypad on it in front of you. there is a small sticky note on the door. it reads: 'GET OUT. -anonymous'_")
 	say("_to the right, there is a 9-digit keypad on something that looks like a container of some kind..._")
@@ -66,33 +64,43 @@ def handle_begin(ack, say, body, respond):
 @app.message(re.compile("KEYPAD"))
 def keypad_handle(message, say):
 	say(f"_<@{message['user']}> looked at the keypad..._")
-	say(f"_all it is doing is flashing the letters '{keypad_code()}'._")
+	say(f"_all it is doing is flashing the letters '{keypad_code(message['channel'])}'._")
 	say("_if you need a hint, type 'FIRST CLUE'._")
-	say("*when you have an answer, or a guess, type 'FIRST ANSWER [answer]'. have fun!*")
-    
-def keypad_code():
+	say("*when you have the answer, or a guess, type 'FIRST ANSWER [answer]'. have fun!*")
+
+def keypad_code(channel):
 	global first_answer_encoded
+	
+	first_answer_encoded = utility.get_value('first_answer_encoded',channel)
+	print("a", channel)
 	if first_answer_encoded == '':
 		a = []
 		alphabet = 'abcdefghi'
 		for _ in range(4):
 			a.append(random.choice(alphabet))
 		first_answer_encoded = ''.join(a)
+		print('b',channel)
+		utility.update_value('first_answer_encoded', first_answer_encoded, channel)
+		utility.update_value('first_answer', decode_keypad(channel), channel)
+		print(utility.get_value('first_answer', channel))
 		return first_answer_encoded
 	else:
 		return first_answer_encoded
 
-def decode_keypad():
-	global first_answer, first_answer_encoded
+def decode_keypad(channel):
+	print('c', channel)
+	global first_answer_encoded
 	answer = []
-	for i in first_answer_encoded:
+	string = utility.get_value('first_answer_encoded', channel)
+	for i in string:
 			answer.append(str(utility.map_alpha_to_numbers(i)))
 
-	first_answer = ''.join(answer)
-	return first_answer
+	a = ''.join(answer)
+	utility.update_value('first_answer', a, channel)
+	return a
 
 @app.message('FIRST CLUE')
-def handle_first_clue(say):
+def handle_first_clue(message, say):
 	say(
 		f"""
 		_the keypad is laid out like this:_
@@ -102,67 +110,68 @@ def handle_first_clue(say):
 		7 8 9
 		   0  
 		
-		_what relation does '{first_answer_encoded}' have to those numbers?_
+		_what relation does '{utility.get_value('first_answer_encoded', message['channel'])}' have to those numbers?_
 		"""
 	)
 	say("_that was your first clue._")
 
-@app.message(f"FIRST ANSWER {first_answer}")
-def handle_first_answer(message, say):
-	global first_puzzle_complete
-	first_puzzle_complete = True
-	say(":yay: you figured it out!")
-	say("_Inside the vault, you find a large piece of paper, with the following..._") 
-	time.sleep(0.25)
-	say("_uh actually,_") 
-	say("_why don't I just show you the paper?_")
-	blocks = [
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "_in cyberspace, the paper resides here: https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png. _"
-			}
-		},
-		{
-			"type": "image",
-			"image_url": "https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png",
-			"alt_text": "'VWLU ZLZHTL' zlltz av dvyr"
-		}
-	]
-	say(blocks=blocks, text="_in cyberspace, the paper resides here: https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png _")
-	say("_(if you hover over it, it should tell you the text in the image...)_")
+# @app.message(f"FIRST ANSWER {first_answer}")
+# def handle_first_answer(message, say):
+# 	global first_puzzle_complete
+# 	first_puzzle_complete = True
+# 	say(":yay: you figured it out!")
+# 	say("_Inside the vault, you find a large piece of paper, with the following..._") 
+# 	say("_uh actually,_") 
+# 	say("_why don't I just show you the paper?_")
+# 	blocks = [
+# 		{
+# 			"type": "section",
+# 			"text": {
+# 				"type": "mrkdwn",
+# 				"text": "_the paper looks like this:_"
+# 			}
+# 		},
+# 		{
+# 			"type": "image",
+# 			"image_url": "https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png",
+# 			"alt_text": "'VWLU ZLZHTL' zlltz av dvyr"
+# 		}
+# 	]
+# 	say(blocks=blocks, text="_in cyberspace, the paper resides here: https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png _")
+# 	say("_(if you hover over it, it should tell you the text in the image...)_")
 
 @app.message("OPEN SESAME")
-def handle_second_puzzle_answer(say):
-	global second_puzzle_finished
+def handle_second_puzzle_answer(message, say):
 	say("_you say the words into the empty room._")
 	say("_a panel in the wall that you didn't know existed pops out and reveals a secceret compartement._")
 	say("_inside the compartment there is a key._")
 	say("*type KEY to go over and pick up the key.*")
-	second_puzzle_finished = True
+	utility.update_value('second_puzzle_finished', True, message['channel'])
 
-@app.message(re.compile("KEY"))
-def handle_key_message(say):
-	global has_key
-	has_key = True
-	say("_you walk over and pick up the key._")
-	say("_what do you think it could open?_")
-	say("_psst_")
-	say("_if you need a clue, type 'SECOND CLUE'.")
+@app.message(re.compile("^KEY$"))
+def handle_key_message(message, say):
+	# global has_key
+	# has_key = True
+	if utility.get_value('second_puzzle_finished', message['channel']):
+		say("_you walk over and pick up the key._")
+		say("_what do you think it could open?_")
+		say("_if you need a clue, type 'SECOND CLUE'._")
+		utility.update_value('has_key', True, message['channel'])
+	else:
+		say("_what key?_")
 
 @app.message("SECOND CLUE")
-def handle_second_clue(say):
+def handle_second_clue(message, say):
 	global first_puzzle_complete
-	if first_puzzle_complete:
+	if utility.get_value('has_key', message['channel']):
 		say("_try typing 'BOX'. that will lead you in the right direction..._")
 	else:
 		say("_You found this by accident! do this later_")
 
 @app.message("BOX")
-def handle_box(say):
+def handle_box(message, say):
 	global has_key, second_puzzle_finished
-	if has_key:
+	if utility.get_value('has_key', message['channel']):
 		say("_you take the key and insert it into the box..._")
 		say("_the box opens and reveals a hastily drawn sticky note..._")
 		blocks = [
@@ -190,15 +199,67 @@ def handle_box(say):
 # def handle_final_answer(say):
 # 	say(":yay: you got out :yay:")
 
+@app.action('ceaser_clue')
+def handle_ceaser_clue(ack, say, body, respond):
+	ack()
+	say("_your hint: the text is a ceaser cipher..._")
+
 @app.event('message')
 def handle_message_events(body, logger, say):
+	#print(body)
+	try:
+		a = utility.get_value('first_answer', body['event']['channel'])
+	except KeyError:
+		a = ''
+	
+	# print(a)
 	try:
 		if body['event']['text'] == 'FINAL PUZZLE 07*846#5':
 			say(":yay: you got out! :yay:")
 			say("thanks for playing!")
+		elif body['event']['text'] == f'FIRST ANSWER {a}':
+			utility.update_value('first_puzzle_complete', True, body['event']['channel'])
+			say("_Inside the vault, you find a large piece of paper, with the following..._") 
+			say("_uh actually,_") 
+			say("_why don't I just show you the paper?_")
+			blocks = [
+				{
+					"type": "section",
+					"text": {
+						"type": "mrkdwn",
+						"text": "_the paper looks like this:_"
+					}
+				},
+				{
+					"type": "image",
+					"image_url": "https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png",
+					"alt_text": "'VWLU ZLZHTL' zlltz av dvyr"
+				},
+				{
+					"type": "actions",
+					"elements": [
+						{
+							"type": "button",
+							"text": {
+								"type": "plain_text",
+								"text": "clue",
+								"emoji": True
+							},
+							"value": "clue",
+							"action_id": "ceaser_clue"
+						}
+					]
+				}
+			]
+			say(blocks=blocks, text="_in cyberspace, the paper resides here: https://hc-cdn.hel1.your-objectstorage.com/s/v3/756ed2af422576e762736dd33e4f0c46ac450c94_vwlu_zlzhtl.png _")
+			say("_(if you hover over it, it should tell you the text in the image...)_")
+
 	except Exception:
 		logger.info(body)
 
 
-def begin():
-    SocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN")).start()
+def begin(http=False, port=3000):
+	if http:
+		app.start(port=int(port))
+	else:
+		SocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN")).start()
