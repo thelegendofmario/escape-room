@@ -17,9 +17,20 @@ def map_alpha_to_numbers(letter: str) -> int:
 
 def initialize_new_session(channelid):
     sessions.update({f'{channelid}': {'first_answer_encoded': '', 'first_answer': '', 'first_puzzle_complete': False, 'has_key': False, 'second_puzzle_finished': False}})
+    backup = open('sessions_backup.txt', 'w')
+    backup.write(str(sessions))
+    backup.close()
 
 def get_value(value, channelid):
-    return sessions[channelid][value]
+    backup = open('sessions_backup.txt', 'r')
+    sessions_dict = eval(backup.read())
+    return sessions_dict[channelid][value]
 
 def update_value(value,updated_value, channelid):
+    backup = open('sessions_backup.txt', 'r')
+    sessions = eval(backup.read())
+    backup.close()
+    backup = open('sessions_backup.txt', 'w')
     sessions[channelid][value] = updated_value
+    backup.write(str(sessions))
+    backup.close()

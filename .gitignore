@@ -11,3 +11,6 @@ wheels/
 
 #.env files
 .env
+
+#backups for sessions
+sessions_backup.txt
